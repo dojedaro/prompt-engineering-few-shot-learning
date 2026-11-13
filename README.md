@@ -1,84 +1,74 @@
-# 🧠 Prompt Engineering for Few-Shot Learning (LLM Evaluation)
+# Zero-, One- and Few-Shot Prompting on Medical QA
 
-This project explores and evaluates **prompt engineering strategies**—**zero-shot**, **one-shot**, and **few-shot prompting**—using large language models on a **medical question-answering (QA)** dataset.
+**Comparing zero-, one- and few-shot prompts for GPT-4o and GPT-4o-mini on Chinese medical exam questions (MedQA), and why five questions per setting couldn't tell the strategies apart.**
 
-Rather than optimizing for peak model performance, the goal of this project is to demonstrate **systematic experiment design, evaluation methodology, and analytical reasoning** when working with LLMs.
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dojedaro/prompt-engineering-few-shot-learning/blob/main/notebooks/Gen_AI_Prompt_Engineering.ipynb)
+[![Notebook checks](https://github.com/dojedaro/prompt-engineering-few-shot-learning/actions/workflows/notebooks.yml/badge.svg)](https://github.com/dojedaro/prompt-engineering-few-shot-learning/actions/workflows/notebooks.yml)
 
----
+## Results
 
-## 🎯 Project Objectives
+Data: `bigbio/med_qa` (Chinese subset, `med_qa_zh_bigbio_qa`). 5 test questions, with 3 examples drawn
+from the remaining questions for the few-shot prompt. Temperature 0.7, up to 200 output tokens.
 
-- Compare **zero-shot, one-shot, and few-shot prompting** strategies
-- Evaluate performance across **two LLM configurations** (GPT-4-class and GPT-3.5-class)
-- Measure output quality using:
-  - String similarity metrics
-  - Exact match scoring
-- Analyze strengths, weaknesses, and trade-offs of each approach
+| Model | Strategy | Answer found in response | Mean string similarity |
+|---|---|---|---|
+| gpt-4o | zero-shot | 1 / 5 | 0.069 |
+| gpt-4o | one-shot | 1 / 5 | 0.118 |
+| gpt-4o | few-shot | 1 / 5 | 0.100 |
+| gpt-4o-mini | zero-shot | 1 / 5 | 0.106 |
+| gpt-4o-mini | one-shot | 1 / 5 | 0.168 |
+| gpt-4o-mini | few-shot | 1 / 5 | 0.083 |
 
----
+**The honest reading: this run can't rank the strategies.** Every configuration found the answer in
+exactly 1 of 5 responses, and the differences in similarity are smaller than their standard deviations
+(up to 0.22). Three design problems explain why, and fixing them is the real lesson:
 
-## 🧪 Dataset
+1. **Five questions per cell.** One question changes the rate by 20 points. Separating strategies
+   that differ by a few points needs hundreds of questions.
+2. **The wrong metric for free text.** "Similarity" is a character-sequence ratio between a gold
+   answer such as 发绀 (two characters) and a full-sentence reply, so a correct answer like
+   "法洛四联症最早且主要的表现是心脏杂音和发绀" still scores low.
+3. **No answer format.** MedQA is multiple choice. Asking for the option letter at temperature 0 and
+   scoring it exactly would make every response gradable.
 
-- **Source:** Hugging Face `bigbio/med_qa`
-- **Domain:** Medical question answering
-- **Format:** Question–answer pairs
-- A small subset is sampled to control **cost and latency** during evaluation
+## How it works
 
----
+```mermaid
+flowchart LR
+    D[MedQA zh<br/>Hugging Face] --> S[Sample 5 test questions<br/>+ 3 examples from the rest]
+    S --> P0[zero-shot prompt]
+    S --> P1[one-shot prompt]
+    S --> P3[few-shot prompt<br/>3 examples]
+    P0 & P1 & P3 --> M[gpt-4o and gpt-4o-mini<br/>retries with backoff]
+    M --> J[(results JSON)]
+    J --> A[similarity + answer-found rate<br/>tables and plots]
+```
 
-## 🏗️ Methodology
+The comparison is a small class (`GPT4oPromptComparison`) that builds each prompt type, calls both
+models with retries and exponential backoff, logs every call, and saves raw responses to JSON so the
+analysis can be rerun without new API calls.
 
-### Prompting Strategies
-- **Zero-shot:** Model answers without examples  
-- **One-shot:** Model is shown one example Q&A  
-- **Few-shot:** Model is given multiple example Q&A pairs  
+## Run it
 
-### Evaluation Pipeline
-- Structured prompt construction per strategy
-- Controlled sampling of test questions
-- Automatic retries with exponential backoff
-- Logging for transparency and reproducibility
-- Results saved to JSON for post-analysis
+```bash
+pip install -r requirements.txt
+cp .env.example .env     # add OPENAI_API_KEY
+jupyter notebook notebooks/Gen_AI_Prompt_Engineering.ipynb
+```
 
----
+The notebook has a placeholder where the key goes; reading it from the environment is safer. Results
+are written to `results/prompt_engineering_results.json`.
 
-## 📊 Evaluation Metrics
+## Stack
 
-**Similarity Score**  
-Uses `difflib.SequenceMatcher` to measure textual similarity between model output and ground-truth answers.
+Python, OpenAI API, Hugging Face Datasets, pandas, Matplotlib, seaborn.
 
-**Exact Match Rate**  
-Binary indicator of whether the correct answer appears in the model output.
+## Next steps
 
-**Aggregated Analysis**
-- Average similarity
-- Standard deviation
-- Exact match rates by model and prompting strategy
+- 200+ questions per configuration, the same questions for every strategy, temperature 0.
+- Ask for the option letter and score exact matches, with 95% confidence intervals per cell.
+- Add chain-of-thought as a fourth strategy, since it is often the bigger lever on medical reasoning.
 
----
+## License
 
-## 📈 Analysis & Visualization
-
-The project includes scripts to:
-
-- Load and analyze raw evaluation results
-- Generate comparative plots:
-  - Average similarity by model and strategy
-  - Exact match rates
-  - Distribution of similarity scores
-  - Heatmap comparisons
-- Export summary statistics to CSV
-
-Visualizations are saved locally for inspection and reporting.
-
----
-
-## 🔐 API Key Handling (Intentional Design)
-
-This repository **does not include any real API keys**.
-
-The code contains a placeholder:
-
-```python
-api_key = "XXXXXXXXXXXXXXXXXXXXXXXX"
-
+MIT
